@@ -15,14 +15,9 @@
 typedef enum {
     END_OF_FILE,
 
-    S_DIR_YML_BGN,  R_DIR_YML_VER,
-    S_DIR_TAG_BGN,  R_DIR_TAG_HDL,  R_DIR_TAG_PFX,
-    S_DIR_RSV_BGN,  R_DIR_RSV_PRM,
     S_DRS_END,
     S_DOC_END,
     R_BLK_SEQ_BGN,  BR_BLK_SEQ_BGN, B_BLK_SEQ_BGN,
-    R_BLK_KEY_BGN,  BR_BLK_KEY_BGN, B_BLK_KEY_BGN,
-    R_BLK_VAL_BGN,  BR_BLK_VAL_BGN, B_BLK_VAL_BGN,
     R_BLK_IMP_BGN,
     R_BLK_LIT_BGN,  BR_BLK_LIT_BGN,
     R_BLK_FLD_BGN,  BR_BLK_FLD_BGN,
@@ -54,10 +49,6 @@ typedef enum {
 
     R_MTL_PLN_STR_BLK,  BR_MTL_PLN_STR_BLK,
     R_MTL_PLN_STR_FLW,  BR_MTL_PLN_STR_FLW,
-
-    R_TAG,     BR_TAG,     B_TAG,
-    R_ACR_BGN, BR_ACR_BGN, B_ACR_BGN, R_ACR_CTN,
-    R_ALS_BGN, BR_ALS_BGN, B_ALS_BGN, R_ALS_CTN,
 
     BL,
     COMMENT,
@@ -314,266 +305,6 @@ static inline bool is_plain_safe_in_block(int32_t c) { return is_ns_char(c); }
 
 static inline bool is_plain_safe_in_flow(int32_t c) { return is_ns_char(c) && !is_c_flow_indicator(c); }
 
-static inline bool is_ns_uri_char(int32_t c) {
-    return is_ns_word_char(c) || c == '#' || c == ';' || c == '/' || c == '?' || c == ':' || c == '@' || c == '&' ||
-           c == '=' || c == '+' || c == '$' || c == ',' || c == '_' || c == '.' || c == '!' || c == '~' || c == '*' ||
-           c == '\'' || c == '(' || c == ')' || c == '[' || c == ']';
-}
-
-static inline bool is_ns_tag_char(int32_t c) {
-    return is_ns_word_char(c) || c == '#' || c == ';' || c == '/' || c == '?' || c == ':' || c == '@' || c == '&' ||
-           c == '=' || c == '+' || c == '$' || c == '_' || c == '.' || c == '~' || c == '*' || c == '\'' || c == '(' ||
-           c == ')';
-}
-
-static inline bool is_ns_anchor_char(int32_t c) { return is_ns_char(c) && !is_c_flow_indicator(c); }
-
-static ScanStatus scn_uri_esc(Scanner *scanner, TSLexer *lexer) {
-    if (lexer->lookahead != '%') {
-        return SCN_STOP;
-    }
-    mrk_end(scanner, lexer);
-    adv(scanner, lexer);
-    if (!is_ns_hex_digit(lexer->lookahead)) {
-        return SCN_FAIL;
-    }
-    adv(scanner, lexer);
-    if (!is_ns_hex_digit(lexer->lookahead)) {
-        return SCN_FAIL;
-    }
-    adv(scanner, lexer);
-    return SCN_SUCC;
-}
-
-static ScanStatus scn_ns_uri_char(Scanner *scanner, TSLexer *lexer) {
-    if (is_ns_uri_char(lexer->lookahead)) {
-        adv(scanner, lexer);
-        return SCN_SUCC;
-    }
-    return scn_uri_esc(scanner, lexer);
-}
-
-static ScanStatus scn_ns_tag_char(Scanner *scanner, TSLexer *lexer) {
-    if (is_ns_tag_char(lexer->lookahead)) {
-        adv(scanner, lexer);
-        return SCN_SUCC;
-    }
-    return scn_uri_esc(scanner, lexer);
-}
-
-static bool scn_dir_bgn(Scanner *scanner, TSLexer *lexer) {
-    adv(scanner, lexer);
-    if (lexer->lookahead == 'Y') {
-        adv(scanner, lexer);
-        if (lexer->lookahead == 'A') {
-            adv(scanner, lexer);
-            if (lexer->lookahead == 'M') {
-                adv(scanner, lexer);
-                if (lexer->lookahead == 'L') {
-                    adv(scanner, lexer);
-                    if (is_wht(lexer->lookahead)) {
-                        mrk_end(scanner, lexer);
-                        RET_SYM(S_DIR_YML_BGN);
-                    }
-                }
-            }
-        }
-    } else if (lexer->lookahead == 'T') {
-        adv(scanner, lexer);
-        if (lexer->lookahead == 'A') {
-            adv(scanner, lexer);
-            if (lexer->lookahead == 'G') {
-                adv(scanner, lexer);
-                if (is_wht(lexer->lookahead)) {
-                    mrk_end(scanner, lexer);
-                    RET_SYM(S_DIR_TAG_BGN);
-                }
-            }
-        }
-    }
-    for (;;) {
-        if (!is_ns_char(lexer->lookahead)) {
-            break;
-        }
-        adv(scanner, lexer);
-    }
-    if (scanner->cur_col > 1 && is_wht(lexer->lookahead)) {
-        mrk_end(scanner, lexer);
-        RET_SYM(S_DIR_RSV_BGN);
-    }
-    return false;
-}
-
-static bool scn_dir_yml_ver(Scanner *scanner, TSLexer *lexer, TSSymbol result_symbol) {
-    uint16_t n1 = 0;
-    uint16_t n2 = 0;
-    while (is_ns_dec_digit(lexer->lookahead)) {
-        adv(scanner, lexer);
-        n1++;
-    }
-    if (lexer->lookahead != '.') {
-        return false;
-    }
-    adv(scanner, lexer);
-    while (is_ns_dec_digit(lexer->lookahead)) {
-        adv(scanner, lexer);
-        n2++;
-    }
-    if (n1 == 0 || n2 == 0) {
-        return false;
-    }
-    mrk_end(scanner, lexer);
-    RET_SYM(result_symbol);
-}
-
-static bool scn_tag_hdl_tal(Scanner *scanner, TSLexer *lexer) {
-    if (lexer->lookahead == '!') {
-        adv(scanner, lexer);
-        return true;
-    }
-    uint16_t n = 0;
-    while (is_ns_word_char(lexer->lookahead)) {
-        adv(scanner, lexer);
-        n++;
-    }
-    if (n == 0) {
-        return true;
-    }
-    if (lexer->lookahead == '!') {
-        adv(scanner, lexer);
-        return true;
-    }
-    return false;
-}
-
-static bool scn_dir_tag_hdl(Scanner *scanner, TSLexer *lexer, TSSymbol result_symbol) {
-    if (lexer->lookahead == '!') {
-        adv(scanner, lexer);
-        if (scn_tag_hdl_tal(scanner, lexer)) {
-            mrk_end(scanner, lexer);
-            RET_SYM(result_symbol);
-        }
-    }
-    return false;
-}
-
-static bool scn_dir_tag_pfx(Scanner *scanner, TSLexer *lexer, TSSymbol result_symbol) {
-    if (lexer->lookahead == '!') {
-        adv(scanner, lexer);
-    } else if (scn_ns_tag_char(scanner, lexer) == SCN_SUCC) {
-        ;
-    } else {
-        return false;
-    }
-    for (;;) {
-        switch (scn_ns_uri_char(scanner, lexer)) {
-            case SCN_STOP:
-                mrk_end(scanner, lexer);
-            case SCN_FAIL:
-                RET_SYM(result_symbol);
-            default:
-                break;
-        }
-    }
-}
-
-static bool scn_dir_rsv_prm(Scanner *scanner, TSLexer *lexer, TSSymbol result_symbol) {
-    if (!is_ns_char(lexer->lookahead)) {
-        return false;
-    }
-    adv(scanner, lexer);
-    while (is_ns_char(lexer->lookahead)) {
-        adv(scanner, lexer);
-    }
-    mrk_end(scanner, lexer);
-    RET_SYM(result_symbol);
-}
-
-static bool scn_tag(Scanner *scanner, TSLexer *lexer, TSSymbol result_symbol) {
-    if (lexer->lookahead != '!') {
-        return false;
-    }
-    adv(scanner, lexer);
-    if (is_wht(lexer->lookahead)) {
-        mrk_end(scanner, lexer);
-        RET_SYM(result_symbol);
-    }
-    if (lexer->lookahead == '<') {
-        adv(scanner, lexer);
-        if (scn_ns_uri_char(scanner, lexer) != SCN_SUCC) {
-            return false;
-        }
-        for (;;) {
-            switch (scn_ns_uri_char(scanner, lexer)) {
-                case SCN_STOP:
-                    if (lexer->lookahead == '>') {
-                        adv(scanner, lexer);
-                        mrk_end(scanner, lexer);
-                        RET_SYM(result_symbol);
-                    }
-                case SCN_FAIL:
-                    return false;
-                default:
-                    break;
-            }
-        }
-    } else {
-        if (scn_tag_hdl_tal(scanner, lexer) && scn_ns_tag_char(scanner, lexer) != SCN_SUCC) {
-            return false;
-        }
-        for (;;) {
-            switch (scn_ns_tag_char(scanner, lexer)) {
-                case SCN_STOP:
-                    mrk_end(scanner, lexer);
-                case SCN_FAIL:
-                    RET_SYM(result_symbol);
-                default:
-                    break;
-            }
-        }
-    }
-    return false;
-}
-
-static bool scn_acr_bgn(Scanner *scanner, TSLexer *lexer, TSSymbol result_symbol) {
-    if (lexer->lookahead != '&') {
-        return false;
-    }
-    adv(scanner, lexer);
-    if (!is_ns_anchor_char(lexer->lookahead)) {
-        return false;
-    }
-    mrk_end(scanner, lexer);
-    RET_SYM(result_symbol);
-}
-
-static bool scn_acr_ctn(Scanner *scanner, TSLexer *lexer, TSSymbol result_symbol) {
-    while (is_ns_anchor_char(lexer->lookahead)) {
-        adv(scanner, lexer);
-    }
-    mrk_end(scanner, lexer);
-    RET_SYM(result_symbol);
-}
-
-static bool scn_als_bgn(Scanner *scanner, TSLexer *lexer, TSSymbol result_symbol) {
-    if (lexer->lookahead != '*') {
-        return false;
-    }
-    adv(scanner, lexer);
-    if (!is_ns_anchor_char(lexer->lookahead)) {
-        return false;
-    }
-    mrk_end(scanner, lexer);
-    RET_SYM(result_symbol);
-}
-
-static bool scn_als_ctn(Scanner *scanner, TSLexer *lexer, TSSymbol result_symbol) {
-    while (is_ns_anchor_char(lexer->lookahead)) {
-        adv(scanner, lexer);
-    }
-    mrk_end(scanner, lexer);
-    RET_SYM(result_symbol);
-}
 
 static bool scn_dqt_esc_seq(Scanner *scanner, TSLexer *lexer, TSSymbol result_symbol) {
     uint16_t i;
@@ -905,18 +636,6 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
     bool is_b = has_nwl && leading_spaces == cur_ind && !has_tab_ind;
     bool is_s = bgn_col == 0;
 
-    if (valid_symbols[R_DIR_YML_VER] && is_r) {
-        return scn_dir_yml_ver(scanner, lexer, R_DIR_YML_VER);
-    }
-    if (valid_symbols[R_DIR_TAG_HDL] && is_r) {
-        return scn_dir_tag_hdl(scanner, lexer, R_DIR_TAG_HDL);
-    }
-    if (valid_symbols[R_DIR_TAG_PFX] && is_r) {
-        return scn_dir_tag_pfx(scanner, lexer, R_DIR_TAG_PFX);
-    }
-    if (valid_symbols[R_DIR_RSV_PRM] && is_r) {
-        return scn_dir_rsv_prm(scanner, lexer, R_DIR_RSV_PRM);
-    }
     if (valid_symbols[BR_BLK_STR_CTN] && is_br && scn_blk_str_cnt(scanner, lexer, BR_BLK_STR_CTN)) {
         return true;
     }
@@ -931,57 +650,7 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
         return true;
     }
 
-    if (valid_symbols[R_ACR_CTN] && is_r) {
-        return scn_acr_ctn(scanner, lexer, R_ACR_CTN);
-    }
-    if (valid_symbols[R_ALS_CTN] && is_r) {
-        return scn_als_ctn(scanner, lexer, R_ALS_CTN);
-    }
-
-    if (lexer->lookahead == '%') {
-        if (valid_symbols[S_DIR_YML_BGN] && is_s) {
-            return scn_dir_bgn(scanner, lexer);
-        }
-    } else if (lexer->lookahead == '*') {
-        if (valid_symbols[R_ALS_BGN] && is_r) {
-            MAY_UPD_IMP_COL();
-            return scn_als_bgn(scanner, lexer, R_ALS_BGN);
-        }
-        if (valid_symbols[BR_ALS_BGN] && is_br) {
-            MAY_UPD_IMP_COL();
-            return scn_als_bgn(scanner, lexer, BR_ALS_BGN);
-        }
-        if (valid_symbols[B_ALS_BGN] && is_b) {
-            MAY_UPD_IMP_COL();
-            return scn_als_bgn(scanner, lexer, B_ALS_BGN);
-        }
-    } else if (lexer->lookahead == '&') {
-        if (valid_symbols[R_ACR_BGN] && is_r) {
-            MAY_UPD_IMP_COL();
-            return scn_acr_bgn(scanner, lexer, R_ACR_BGN);
-        }
-        if (valid_symbols[BR_ACR_BGN] && is_br) {
-            MAY_UPD_IMP_COL();
-            return scn_acr_bgn(scanner, lexer, BR_ACR_BGN);
-        }
-        if (valid_symbols[B_ACR_BGN] && is_b) {
-            MAY_UPD_IMP_COL();
-            return scn_acr_bgn(scanner, lexer, B_ACR_BGN);
-        }
-    } else if (lexer->lookahead == '!') {
-        if (valid_symbols[R_TAG] && is_r) {
-            MAY_UPD_IMP_COL();
-            return scn_tag(scanner, lexer, R_TAG);
-        }
-        if (valid_symbols[BR_TAG] && is_br) {
-            MAY_UPD_IMP_COL();
-            return scn_tag(scanner, lexer, BR_TAG);
-        }
-        if (valid_symbols[B_TAG] && is_b) {
-            MAY_UPD_IMP_COL();
-            return scn_tag(scanner, lexer, B_TAG);
-        }
-    } else if (lexer->lookahead == '[') {
+    if (lexer->lookahead == '[') {
         if (valid_symbols[R_FLW_SEQ_BGN] && is_r) {
             MAY_UPD_IMP_COL();
             adv(scanner, lexer);
@@ -1133,25 +802,12 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
             }
         }
     } else if (lexer->lookahead == '?') {
-        bool is_r_blk_key_bgn = valid_symbols[R_BLK_KEY_BGN] && is_r;
-        bool is_br_blk_key_bgn = valid_symbols[BR_BLK_KEY_BGN] && is_br;
-        bool is_b_blk_key_bgn = valid_symbols[B_BLK_KEY_BGN] && is_b;
         bool is_r_flw_key_bgn = valid_symbols[R_FLW_KEY_BGN] && is_r;
         bool is_br_flw_key_bgn = valid_symbols[BR_FLW_KEY_BGN] && is_br;
-        if (is_r_blk_key_bgn || is_br_blk_key_bgn || is_b_blk_key_bgn || is_r_flw_key_bgn || is_br_flw_key_bgn) {
+        if (is_r_flw_key_bgn || is_br_flw_key_bgn) {
             adv(scanner, lexer);
             if (is_wht(lexer->lookahead)) {
                 mrk_end(scanner, lexer);
-                if (is_r_blk_key_bgn) {
-                    PUSH_BGN_IND(IND_MAP);
-                    RET_SYM(R_BLK_KEY_BGN);
-                }
-                if (is_br_blk_key_bgn) {
-                    PUSH_BGN_IND(IND_MAP);
-                    RET_SYM(BR_BLK_KEY_BGN);
-                }
-                if (is_b_blk_key_bgn)
-                    RET_SYM(B_BLK_KEY_BGN);
                 if (is_r_flw_key_bgn)
                     RET_SYM(R_FLW_KEY_BGN);
                 if (is_br_flw_key_bgn)
@@ -1169,31 +825,13 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
             mrk_end(scanner, lexer);
             RET_SYM(BR_FLW_JSV_BGN);
         }
-        bool is_r_blk_val_bgn = valid_symbols[R_BLK_VAL_BGN] && is_r;
-        bool is_br_blk_val_bgn = valid_symbols[BR_BLK_VAL_BGN] && is_br;
-        bool is_b_blk_val_bgn = valid_symbols[B_BLK_VAL_BGN] && is_b;
         bool is_r_blk_imp_bgn = valid_symbols[R_BLK_IMP_BGN] && is_r;
         bool is_r_flw_njv_bgn = valid_symbols[R_FLW_NJV_BGN] && is_r;
         bool is_br_flw_njv_bgn = valid_symbols[BR_FLW_NJV_BGN] && is_br;
-        if (is_r_blk_val_bgn || is_br_blk_val_bgn || is_b_blk_val_bgn || is_r_blk_imp_bgn || is_r_flw_njv_bgn ||
-            is_br_flw_njv_bgn) {
+        if (is_r_blk_imp_bgn || is_r_flw_njv_bgn || is_br_flw_njv_bgn) {
             adv(scanner, lexer);
             bool is_lka_wht = is_wht(lexer->lookahead);
             if (is_lka_wht) {
-                if (is_r_blk_val_bgn) {
-                    PUSH_BGN_IND(IND_MAP);
-                    mrk_end(scanner, lexer);
-                    RET_SYM(R_BLK_VAL_BGN);
-                }
-                if (is_br_blk_val_bgn) {
-                    PUSH_BGN_IND(IND_MAP);
-                    mrk_end(scanner, lexer);
-                    RET_SYM(BR_BLK_VAL_BGN);
-                }
-                if (is_b_blk_val_bgn) {
-                    mrk_end(scanner, lexer);
-                    RET_SYM(B_BLK_VAL_BGN);
-                }
                 if (is_r_blk_imp_bgn) {
                     MAY_PUSH_IMP_IND();
                     mrk_end(scanner, lexer);
